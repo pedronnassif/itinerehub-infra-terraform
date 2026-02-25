@@ -1,0 +1,6 @@
+# B2B Agency – Dev
+project_id  = "aitinereagency"
+region      = "us-central1"
+env         = "dev"
+db_password = "CHANGE_ME"
+alert_email = ""

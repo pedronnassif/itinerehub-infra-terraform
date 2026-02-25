@@ -1,0 +1,7 @@
+# B2B Agency – Staging (shares aitinereagency project with dev)
+project_id  = "aitinereagency"
+region      = "us-central1"
+env         = "staging"
+db_password = "CHANGE_ME"
+alert_email = "ops@itinerehub.com"
+# domain    = "staging-agency.itinerehub.com"  # Uncomment when domain is ready

@@ -1,0 +1,6 @@
+# B2C Backend – Dev
+project_id  = "aitinerehub"
+region      = "me-central1"
+env         = "dev"
+db_password = "CHANGE_ME"
+alert_email = ""

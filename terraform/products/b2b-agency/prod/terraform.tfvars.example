@@ -1,0 +1,7 @@
+# B2B Agency – Production
+project_id     = "aitinereagency-prod"
+region         = "us-central1"
+env            = "prod"
+db_password    = "CHANGE_ME"
+alert_email    = "ops@itinerehub.com"
+dev_project_id = "aitinereagency"

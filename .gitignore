@@ -1,0 +1,38 @@
+# ─── Terraform ────────────────────────────────────────────
+# Local .terraform directories (providers, plugins, caches)
+**/.terraform/
+
+# Terraform state files — NEVER commit state
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Lock files (uncomment if you want provider lock committed)
+# .terraform.lock.hcl
+
+# ─── Secrets & Variables ──────────────────────────────────
+# Actual tfvars files (may contain secrets)
+*.tfvars
+!*.tfvars.example
+
+# Environment-specific secret overrides
+*.auto.tfvars
+
+# ─── IDE & OS ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Misc ─────────────────────────────────────────────────
+*.bak
+*.tmp
+*.log
