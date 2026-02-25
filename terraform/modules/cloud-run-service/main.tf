@@ -103,6 +103,12 @@ variable "invoker_service_account" {
   default     = ""
 }
 
+variable "enable_private_invoker" {
+  description = "Whether to create the private IAM invoker binding (avoids count depending on unknown SA email)"
+  type        = bool
+  default     = false
+}
+
 # ---------- Cloud Run v2 Service -------------------------------------------
 resource "google_cloud_run_v2_service" "service" {
   name     = var.name
@@ -202,7 +208,7 @@ resource "google_cloud_run_service_iam_member" "public" {
 
 # --- IAM: Private access (SA only) -----------------------------------------
 resource "google_cloud_run_service_iam_member" "private" {
-  count = (!var.is_public && var.invoker_service_account != "") ? 1 : 0
+  count = var.enable_private_invoker ? 1 : 0
 
   project  = var.project_id
   location = var.region

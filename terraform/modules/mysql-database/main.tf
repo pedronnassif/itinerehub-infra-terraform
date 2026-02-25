@@ -85,7 +85,6 @@ resource "google_sql_database_instance" "db" {
     ip_configuration {
       ipv4_enabled                                  = false
       private_network                               = var.vpc_network_id
-      require_ssl                                   = true
       ssl_mode                                      = "ENCRYPTED_ONLY"
       enable_private_path_for_google_cloud_services = true
     }
@@ -95,7 +94,6 @@ resource "google_sql_database_instance" "db" {
       binary_log_enabled             = true
       start_time                     = "03:00"
       location                       = var.backup_location
-      point_in_time_recovery_enabled = true
 
       backup_retention_settings {
         retained_backups = var.retained_backups

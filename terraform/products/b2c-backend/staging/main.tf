@@ -332,6 +332,10 @@ module "notifications_retry" {
 
 locals {
   image_base = "${var.region}-docker.pkg.dev/${var.project_id}/staging"
+  # Placeholder image for initial provisioning (before CI/CD pushes real images).
+  # The lifecycle { ignore_changes = [image] } in the module means Terraform
+  # won't revert to this after the first apply.
+  placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello:latest"
 
   b2c_services = {
     "${var.env}-ih-spring-gw-service" = {
@@ -386,7 +390,7 @@ module "b2c_services" {
   name                    = each.key
   project_id              = var.project_id
   region                  = var.region
-  image                   = "${local.image_base}/${each.key}:latest"
+  image                   = local.placeholder_image
   port                    = each.value.port
   memory                  = each.value.memory
   min_instances           = each.value.min
@@ -396,6 +400,7 @@ module "b2c_services" {
   vpc_subnet              = module.networking.primary_subnet_name
   is_public               = each.value.is_public
   invoker_service_account = each.value.is_public ? "" : google_service_account.cloud_run_sa.email
+  enable_private_invoker  = !each.value.is_public
 }
 
 ###############################################################################
