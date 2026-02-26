@@ -1,10 +1,12 @@
 ###############################################################################
-# Itinerehub B2C Backend – DEV
+# Itinerehub B2C Backend – RC (Release Candidate)
 # GCP Project: aitinerehub (541454969801)
-# Region:      me-central1 (existing dev project)
+# Region:      me-central1 (same project as dev — RC namespace)
 #
-# Modular config using shared modules – mirrors the prod structure
-# but with dev-appropriate sizing and security settings.
+# RC is the sole pre-prod gate, replacing the deleted staging environment.
+# Uses 512 MiB memory for all services (right-sized 2026-02-26).
+# Shares the aitinerehub project with dev, using separate VPC / resource
+# names via env prefix.
 ###############################################################################
 
 terraform {
@@ -18,7 +20,7 @@ terraform {
 
   backend "gcs" {
     bucket = "itinerehub-tf-state"
-    prefix = "b2c-backend/dev"
+    prefix = "b2c-backend/rc"
   }
 }
 
@@ -40,7 +42,7 @@ variable "region" {
 
 variable "env" {
   type    = string
-  default = "dev"
+  default = "rc"
 }
 
 variable "db_password" {
@@ -54,7 +56,7 @@ variable "alert_email" {
 }
 
 ###############################################################################
-# 0. ENABLE APIS
+# 0. ENABLE APIS (shared project — these are likely already enabled by dev)
 ###############################################################################
 
 resource "google_project_service" "apis" {
@@ -82,7 +84,7 @@ resource "google_project_service" "apis" {
 }
 
 ###############################################################################
-# 1. NETWORKING
+# 1. NETWORKING (separate VPC from dev, non-overlapping CIDRs)
 ###############################################################################
 
 module "networking" {
@@ -91,15 +93,15 @@ module "networking" {
   env              = var.env
   project_id       = var.project_id
   region           = var.region
-  primary_cidr     = "10.0.0.0/24"
-  serverless_cidr  = "10.0.1.0/28"
-  redis_cidr       = "10.0.2.0/28"
+  primary_cidr     = "10.128.0.0/28"   # RC uses 10.128.x range
+  serverless_cidr  = "10.128.1.0/28"
+  redis_cidr       = "10.128.2.0/28"
   enable_flow_logs = false
-  enable_cloud_nat = false             # Cloud Run uses Direct VPC Egress, no NAT needed
+  enable_cloud_nat = false              # Cloud Run uses Direct VPC Egress
 }
 
 ###############################################################################
-# 2. CLOUD SQL
+# 2. CLOUD SQL – MySQL 8.0 (same tier as dev: f1-micro)
 ###############################################################################
 
 module "database" {
@@ -136,31 +138,15 @@ module "database" {
 }
 
 ###############################################################################
-# 3. REDIS
+# 3. ARTIFACT REGISTRY (RC uses the shared "release" repo from dev)
 ###############################################################################
 
-module "redis" {
-  source = "../../../modules/redis"
-
-  env                    = var.env
-  project_id             = var.project_id
-  region                 = var.region
-  vpc_network_id         = module.networking.vpc_id
-  private_vpc_connection = module.networking.private_vpc_connection
-  memory_size_gb         = 1
-  tier                   = "BASIC"
-}
-
-###############################################################################
-# 4. ARTIFACT REGISTRY
-###############################################################################
-
-resource "google_artifact_registry_repository" "develop" {
+resource "google_artifact_registry_repository" "release" {
   project       = var.project_id
   location      = var.region
-  repository_id = "develop"
+  repository_id = "release"
   format        = "DOCKER"
-  description   = "B2C Dev Docker images (consolidated)"
+  description   = "B2C Release Candidate Docker images"
 
   cleanup_policies {
     id     = "keep-recent"
@@ -189,28 +175,14 @@ resource "google_artifact_registry_repository" "develop" {
   }
 }
 
-resource "google_artifact_registry_repository" "maven_dev" {
-  project       = var.project_id
-  location      = var.region
-  repository_id = "develop-pkg"
-  format        = "MAVEN"
-  description   = "B2C Dev Maven packages"
-}
-
 ###############################################################################
-# 5. SERVICE ACCOUNTS
+# 4. SERVICE ACCOUNTS
 ###############################################################################
-
-resource "google_service_account" "cicd" {
-  project      = var.project_id
-  account_id   = "github-actions"
-  display_name = "B2C Dev GitHub Actions CI/CD"
-}
 
 resource "google_service_account" "cloud_run_sa" {
   project      = var.project_id
   account_id   = "${var.env}-cloud-run-sa"
-  display_name = "B2C Dev Cloud Run SA"
+  display_name = "B2C RC Cloud Run SA"
 }
 
 # Cloud Run SA permissions
@@ -231,25 +203,11 @@ resource "google_project_iam_member" "cloud_run_roles" {
   member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }
 
-# CI/CD SA permissions
-resource "google_project_iam_member" "cicd_roles" {
-  for_each = toset([
-    "roles/run.admin",
-    "roles/artifactregistry.writer",
-    "roles/secretmanager.secretAccessor",
-    "roles/iam.serviceAccountUser",
-  ])
-
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.cicd.email}"
-}
-
 # Storage SA
 resource "google_service_account" "storage_sa" {
   project      = var.project_id
   account_id   = "${var.env}-storage-sa"
-  display_name = "B2C Dev Storage SA"
+  display_name = "B2C RC Storage SA"
 }
 
 resource "google_project_iam_member" "storage_admin" {
@@ -259,11 +217,11 @@ resource "google_project_iam_member" "storage_admin" {
 }
 
 ###############################################################################
-# 6. GCS BUCKETS
+# 5. GCS BUCKETS
 ###############################################################################
 
 resource "google_storage_bucket" "service_bucket" {
-  name          = "${var.env}-ih-service-bucket"
+  name          = "ih-${var.env}-service-bucket"
   project       = var.project_id
   location      = var.region
   storage_class = "STANDARD"
@@ -271,17 +229,8 @@ resource "google_storage_bucket" "service_bucket" {
   uniform_bucket_level_access = true
 }
 
-resource "google_storage_bucket" "assets_bucket" {
-  name          = "${var.env}-ih-assets-bucket"
-  project       = var.project_id
-  location      = var.region
-  storage_class = "STANDARD"
-
-  uniform_bucket_level_access = true
-}
-
-resource "google_storage_bucket" "user_bucket" {
-  name          = "${var.env}-ih-user-bucket"
+resource "google_storage_bucket" "crm_bucket" {
+  name          = "${var.env}-ih-crm"
   project       = var.project_id
   location      = var.region
   storage_class = "STANDARD"
@@ -290,28 +239,28 @@ resource "google_storage_bucket" "user_bucket" {
 }
 
 ###############################################################################
-# 7. PUB/SUB
+# 6. PUB/SUB
 ###############################################################################
 
 module "dead_letter" {
   source     = "../../../modules/pubsub"
   project_id = var.project_id
-  topic_name = "dead-letter-notifications"
+  topic_name = "${var.env}-dead-letter-notifications"
 }
 
 module "notification_events" {
-  source              = "../../../modules/pubsub"
-  project_id          = var.project_id
-  topic_name          = "${var.env}-notifications-events-topic"
-  subscription_name   = "${var.env}-notifications-push-subscriptions"
+  source               = "../../../modules/pubsub"
+  project_id           = var.project_id
+  topic_name           = "${var.env}-notifications-events-topic"
+  subscription_name    = "${var.env}-notifications-push-subscriptions"
   dead_letter_topic_id = module.dead_letter.topic_id
 }
 
 module "batch_push" {
-  source              = "../../../modules/pubsub"
-  project_id          = var.project_id
-  topic_name          = "${var.env}-batch-push-notification-event-topic"
-  subscription_name   = "${var.env}-batch-push-notification-event-subscriptions"
+  source               = "../../../modules/pubsub"
+  project_id           = var.project_id
+  topic_name           = "${var.env}-batch-push-notification-event-topic"
+  subscription_name    = "${var.env}-batch-push-notification-event-subscriptions"
   dead_letter_topic_id = module.dead_letter.topic_id
 }
 
@@ -330,58 +279,59 @@ module "notification_push" {
 module "notifications_retry" {
   source     = "../../../modules/pubsub"
   project_id = var.project_id
-  topic_name = "${var.env}-notifications-retry-topic"
+  topic_name = "${var.env}.notifications-retry-topic"
 }
 
 ###############################################################################
-# 8. CLOUD RUN – B2C SERVICES (dev: max 1 instance, scale to zero)
+# 7. CLOUD RUN – B2C SERVICES (rc: max 3, all 512Mi right-sized)
 ###############################################################################
 
 locals {
-  image_base = "${var.region}-docker.pkg.dev/${var.project_id}/develop"
+  image_base = "${var.region}-docker.pkg.dev/${var.project_id}/release"
+  # Placeholder image for initial provisioning (before CI/CD pushes real images).
+  # The lifecycle { ignore_changes = [image] } in the module means Terraform
+  # won't revert to this after the first apply.
+  placeholder_image = "us-docker.pkg.dev/cloudrun/container/hello:latest"
 
   b2c_services = {
     "${var.env}-ih-spring-gw-service" = {
-      port = 5049, memory = "1Gi", min = 0, max = 1, is_public = true
+      port = 6049, memory = "512Mi", min = 0, max = 3, is_public = true
     }
     "${var.env}-user-service" = {
-      port = 5050, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6059, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-trip-service" = {
-      port = 5051, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6053, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-location-service" = {
-      port = 5052, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6061, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-notification-service" = {
-      port = 5053, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6057, memory = "512Mi", min = 0, max = 2, is_public = false
     }
     "${var.env}-financial-service" = {
-      port = 5054, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6055, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-transportation-service" = {
-      port = 5055, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6051, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-booking-service" = {
-      port = 5056, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6062, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-aaccomodation-service" = {
-      port = 5057, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6050, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-ai-service" = {
-      port = 5058, memory = "1Gi", min = 0, max = 1, is_public = false
+      port = 6056, memory = "512Mi", min = 0, max = 2, is_public = false
     }
     "${var.env}-assets-service" = {
-      port = 5059, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6058, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-ih-subscription-service" = {
-      port = 5060, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6054, memory = "512Mi", min = 0, max = 2, is_public = false
     }
     "${var.env}-ih-voucher-processing-service" = {
-      port = 5061, memory = "512Mi", min = 0, max = 1, is_public = false
-    }
-    "${var.env}-mobility-service" = {
-      port = 5065, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 6065, memory = "512Mi", min = 0, max = 2, is_public = false
     }
   }
 }
@@ -393,7 +343,7 @@ module "b2c_services" {
   name                    = each.key
   project_id              = var.project_id
   region                  = var.region
-  image                   = "${local.image_base}/${each.key}:latest"
+  image                   = local.placeholder_image
   port                    = each.value.port
   memory                  = each.value.memory
   min_instances           = each.value.min
@@ -407,7 +357,7 @@ module "b2c_services" {
 }
 
 ###############################################################################
-# 9. MONITORING (optional for dev)
+# 8. MONITORING (optional for RC)
 ###############################################################################
 
 module "monitoring" {
@@ -432,10 +382,6 @@ output "vpc_id" {
 
 output "sql_connection_name" {
   value = module.database.connection_name
-}
-
-output "redis_host" {
-  value = module.redis.host
 }
 
 output "gateway_url" {
