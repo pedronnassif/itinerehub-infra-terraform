@@ -1,0 +1,7 @@
+# B2C Backend – RC (Release Candidate)
+# Shares aitinerehub project with dev, separate VPC namespace.
+project_id  = "aitinerehub"
+region      = "me-central1"
+env         = "rc"
+db_password = "CHANGE_ME"
+alert_email = ""
