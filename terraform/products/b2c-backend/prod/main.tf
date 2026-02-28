@@ -84,6 +84,7 @@ resource "google_project_service" "apis" {
     "redis.googleapis.com",
     "places.googleapis.com",
     "aiplatform.googleapis.com",
+    "cloudscheduler.googleapis.com",
   ])
 
   project            = var.project_id
@@ -478,6 +479,69 @@ module "monitoring" {
   project_id  = var.project_id
   env         = var.env
   alert_email = var.alert_email
+}
+
+###############################################################################
+# 12. CLOUD SQL DOWNTIME SCHEDULE (00:00–06:00 KSA daily)
+#
+# Two Cloud Scheduler jobs call the SQL Admin REST API to toggle the
+# instance activation policy: NEVER = stopped, ALWAYS = running.
+###############################################################################
+
+resource "google_service_account" "sql_scheduler_sa" {
+  project      = var.project_id
+  account_id   = "${var.env}-sql-scheduler-sa"
+  display_name = "B2C Prod Cloud SQL Scheduler"
+}
+
+resource "google_project_iam_member" "sql_scheduler_admin" {
+  project = var.project_id
+  role    = "roles/cloudsql.admin"
+  member  = "serviceAccount:${google_service_account.sql_scheduler_sa.email}"
+}
+
+resource "google_cloud_scheduler_job" "sql_stop" {
+  name      = "${var.env}-sql-stop-midnight"
+  project   = var.project_id
+  region    = var.region
+  schedule  = "0 0 * * *"
+  time_zone = "Asia/Riyadh"
+
+  http_target {
+    uri         = "https://sqladmin.googleapis.com/v1/projects/${var.project_id}/instances/${module.database.instance_name}"
+    http_method = "PATCH"
+    body        = base64encode(jsonencode({ settings = { activationPolicy = "NEVER" } }))
+    headers     = { "Content-Type" = "application/json" }
+
+    oauth_token {
+      service_account_email = google_service_account.sql_scheduler_sa.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_cloud_scheduler_job" "sql_start" {
+  name      = "${var.env}-sql-start-morning"
+  project   = var.project_id
+  region    = var.region
+  schedule  = "0 6 * * *"
+  time_zone = "Asia/Riyadh"
+
+  http_target {
+    uri         = "https://sqladmin.googleapis.com/v1/projects/${var.project_id}/instances/${module.database.instance_name}"
+    http_method = "PATCH"
+    body        = base64encode(jsonencode({ settings = { activationPolicy = "ALWAYS" } }))
+    headers     = { "Content-Type" = "application/json" }
+
+    oauth_token {
+      service_account_email = google_service_account.sql_scheduler_sa.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [google_project_service.apis]
 }
 
 ###############################################################################
