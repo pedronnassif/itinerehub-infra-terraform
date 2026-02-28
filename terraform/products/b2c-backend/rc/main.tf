@@ -4,7 +4,8 @@
 # Region:      me-central1 (same project as dev — RC namespace)
 #
 # RC is the sole pre-prod gate, replacing the deleted staging environment.
-# Uses 512 MiB memory for all services (right-sized 2026-02-26).
+# Most services use 512 MiB; ai-service and user-service require 1 GiB
+# (OOM during Spring Boot startup at 512 MiB — see GCP_Cost_Optimization_Report).
 # Shares the aitinerehub project with dev, using separate VPC / resource
 # names via env prefix.
 ###############################################################################
@@ -283,7 +284,7 @@ module "notifications_retry" {
 }
 
 ###############################################################################
-# 7. CLOUD RUN – B2C SERVICES (rc: max 3, all 512Mi right-sized)
+# 7. CLOUD RUN – B2C SERVICES (rc: max 3, most 512Mi; ai/user at 1Gi)
 ###############################################################################
 
 locals {
@@ -298,7 +299,7 @@ locals {
       port = 6049, memory = "512Mi", min = 0, max = 3, is_public = true
     }
     "${var.env}-user-service" = {
-      port = 6059, memory = "512Mi", min = 0, max = 3, is_public = false
+      port = 6059, memory = "1Gi", min = 0, max = 3, is_public = false
     }
     "${var.env}-trip-service" = {
       port = 6053, memory = "512Mi", min = 0, max = 3, is_public = false
@@ -322,7 +323,7 @@ locals {
       port = 6050, memory = "512Mi", min = 0, max = 3, is_public = false
     }
     "${var.env}-ai-service" = {
-      port = 6056, memory = "512Mi", min = 0, max = 2, is_public = false
+      port = 6056, memory = "1Gi", min = 0, max = 2, is_public = false
     }
     "${var.env}-assets-service" = {
       port = 6058, memory = "512Mi", min = 0, max = 3, is_public = false

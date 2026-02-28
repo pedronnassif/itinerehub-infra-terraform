@@ -345,22 +345,22 @@ locals {
       port = 5049, memory = "1Gi", min = 0, max = 1, is_public = true
     }
     "${var.env}-user-service" = {
-      port = 5050, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 5050, memory = "1Gi", min = 0, max = 1, is_public = false
     }
     "${var.env}-trip-service" = {
-      port = 5051, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 5051, memory = "1Gi", min = 0, max = 1, is_public = false
     }
     "${var.env}-location-service" = {
       port = 5052, memory = "512Mi", min = 0, max = 1, is_public = false
     }
     "${var.env}-notification-service" = {
-      port = 5053, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 5053, memory = "1Gi", min = 0, max = 1, is_public = false
     }
     "${var.env}-financial-service" = {
       port = 5054, memory = "512Mi", min = 0, max = 1, is_public = false
     }
     "${var.env}-transportation-service" = {
-      port = 5055, memory = "512Mi", min = 0, max = 1, is_public = false
+      port = 5055, memory = "1Gi", min = 0, max = 1, is_public = false
     }
     "${var.env}-booking-service" = {
       port = 5056, memory = "512Mi", min = 0, max = 1, is_public = false
