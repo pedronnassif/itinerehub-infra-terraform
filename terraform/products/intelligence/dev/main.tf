@@ -44,7 +44,8 @@ variable "zone" {
 ###############################################################################
 # VM UPTIME SCHEDULE – dev-claude-agents
 #
-# Stop at 01:00 KSA (Asia/Riyadh), Start at 07:00 KSA (Asia/Riyadh)
+# Start at 09:00 KSA, Stop at 23:00 KSA (14h/day)
+# Cron orchestration fires at 10:00 KSA — 1h boot buffer
 ###############################################################################
 
 resource "google_compute_resource_policy" "dev_claude_agents_schedule" {
@@ -54,10 +55,10 @@ resource "google_compute_resource_policy" "dev_claude_agents_schedule" {
 
   instance_schedule_policy {
     vm_start_schedule {
-      schedule = "0 7 * * *"
+      schedule = "0 9 * * *"
     }
     vm_stop_schedule {
-      schedule = "0 1 * * *"
+      schedule = "0 23 * * *"
     }
     time_zone = "Asia/Riyadh"
   }
