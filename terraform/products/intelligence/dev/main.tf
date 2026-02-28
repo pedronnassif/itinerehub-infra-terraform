@@ -63,9 +63,27 @@ resource "google_compute_resource_policy" "dev_claude_agents_schedule" {
   }
 }
 
-resource "google_compute_instance_resource_policy_attachment" "dev_claude_agents" {
-  name     = google_compute_resource_policy.dev_claude_agents_schedule.name
-  project  = var.project_id
-  zone     = var.zone
-  instance = "dev-claude-agents"
+resource "terraform_data" "attach_schedule_to_vm" {
+  triggers_replace = [
+    google_compute_resource_policy.dev_claude_agents_schedule.id,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      gcloud compute instances add-resource-policies dev-claude-agents \
+        --resource-policies=${google_compute_resource_policy.dev_claude_agents_schedule.name} \
+        --zone=${var.zone} \
+        --project=${var.project_id}
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      gcloud compute instances remove-resource-policies dev-claude-agents \
+        --resource-policies=dev-claude-agents-uptime \
+        --zone=us-central1-a \
+        --project=itinerehub-intelligence
+    EOT
+  }
 }
